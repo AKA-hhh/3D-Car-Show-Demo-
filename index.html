@@ -228,7 +228,7 @@
                     setTimeout(() => loaderUI.style.display = 'none', 800);
                 }, 500);
             }, (xhr) => {
-                const percent = Math.round((xhr.loaded / xhr.total) * 100);
+                const percent = Math.round((xhr.loaded / xhr.total * 2) * 100);
                 statusText.innerText = `Establishing Link... ${percent}%`;
             });
         }
