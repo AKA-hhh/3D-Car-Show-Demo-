@@ -13,17 +13,17 @@
             margin: 0; 
             background: #050505; 
             overflow: hidden; 
-            font-family: 'Orbitron', 'Segoe UI', sans-serif; /* 建议引入科技感字体 */
+            font-family: 'Orbitron', 'Segoe UI', sans-serif;
         }
         canvas { display: block; }
 
-        /* 高级科技感菜单 */
+
         #ui-layer {
             position: absolute; top: 30px; right: 30px;
             background: var(--glass-bg);
             backdrop-filter: blur(20px);
             padding: 24px;
-            border-radius: 4px; /* 方正边框更显硬朗高级 */
+            border-radius: 4px; 
             border-left: 4px solid var(--primary-color);
             color: white;
             z-index: 100;
@@ -139,7 +139,7 @@
             renderer.toneMappingExposure = 1.0;
             document.body.appendChild(renderer.domElement);
 
-            // 4. 镜面地板 (高级感的关键)
+            // 4. 镜面地板
             const groundMirror = new Reflector(new THREE.PlaneGeometry(100, 100), {
                 clipBias: 0.003,
                 textureWidth: window.innerWidth * window.devicePixelRatio,
@@ -149,10 +149,10 @@
             groundMirror.rotateX(-Math.PI / 2);
             scene.add(groundMirror);
 
-            // 5. 粒子系统 (氛围感)
+            // 5. 粒子系统
             createParticles();
 
-            // 6. 后期处理 (辉光)
+            // 6. 后期处理
             const renderScene = new RenderPass(scene, camera);
             const bloomPass = new UnrealBloomPass(new THREE.Vector2(window.innerWidth, window.innerHeight), 0.4, 0.4, 0.85);
             composer = new EffectComposer(renderer);
@@ -163,7 +163,7 @@
             controls = new OrbitControls(camera, renderer.domElement);
             controls.enableDamping = true;
             controls.maxPolarAngle = Math.PI / 2 - 0.05;
-            controls.autoRotate = true; // 开启自动旋转，像展厅一样
+            controls.autoRotate = true; // 开启自动旋转展厅
             controls.autoRotateSpeed = 0.5;
 
             // 8. 灯光与环境
