@@ -1,0 +1,259 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>3D车辆展厅</title>
+    <style>
+        :root {
+            --primary-color: #00f2ff;
+            --glass-bg: rgba(0, 0, 0, 0.7);
+        }
+        body { 
+            margin: 0; 
+            background: #050505; 
+            overflow: hidden; 
+            font-family: 'Orbitron', 'Segoe UI', sans-serif; 
+        }
+        canvas { display: block; }
+
+
+        #ui-layer {
+            position: absolute; top: 30px; right: 30px;
+            background: var(--glass-bg);
+            backdrop-filter: blur(20px);
+            padding: 24px;
+            border-radius: 4px; 
+            border-left: 4px solid var(--primary-color);
+            color: white;
+            z-index: 100;
+            box-shadow: 0 20px 50px rgba(0,0,0,0.8);
+        }
+        h2 { 
+            margin: 0 0 20px 0; font-size: 14px; 
+            letter-spacing: 3px; color: var(--primary-color);
+            text-transform: uppercase;
+        }
+        select {
+            background: #000; color: #fff; border: 1px solid #333;
+            padding: 12px; border-radius: 0; width: 200px; 
+            outline: none; cursor: pointer; font-size: 12px;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+        select:hover { border-color: var(--primary-color); background: #111; }
+
+        /* 全屏加载动效 */
+        #loader {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: #000; display: flex; flex-direction: column;
+            justify-content: center; align-items: center; z-index: 1000;
+            transition: opacity 0.8s ease;
+        }
+        .scanner-line {
+            width: 300px; height: 1px; background: var(--primary-color);
+            box-shadow: 0 0 15px var(--primary-color);
+            animation: scan 2s infinite ease-in-out;
+        }
+        @keyframes scan {
+            0% { transform: translateY(-50px); opacity: 0; }
+            50% { opacity: 1; }
+            100% { transform: translateY(50px); opacity: 0; }
+        }
+        .loading-text { 
+            color: white; letter-spacing: 8px; font-size: 10px; 
+            margin-top: 30px; text-transform: uppercase;
+        }
+
+        .controls-hint {
+            position: absolute; bottom: 30px; left: 30px; 
+            color: rgba(255,255,255,0.3); font-size: 10px; 
+            letter-spacing: 2px; pointer-events: none;
+        }
+    </style>
+</head>
+<body>
+
+    <div id="ui-layer">
+        <h2>Cars Show</h2>
+        <select id="modelSelect">    
+            <option value="Tesla Model 3">TESLA Model 3</option>    
+            <option value="Xiaomi su7 max">XIAOMI SU7 MAX</option>
+            <option value="xiaomi yu7">XIAOMI YU7</option>
+            <option value="lamborghini">LAMBORGHINI</option>
+        </select>
+    </div>
+
+    <div id="loader">
+        <div class="scanner-line"></div>
+        <div class="loading-text" id="status">Syncing Data... 0%</div>
+    </div>
+
+    <div class="controls-hint">DRAG TO ROTATE // SCROLL TO ZOOM</div>
+
+    <script type="importmap">
+        {
+            "imports": {
+                "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+                "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+            }
+        }
+    </script>
+
+    <script type="module">
+        import * as THREE from 'three';
+        import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+        import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+        import { RGBELoader } from 'three/addons/loaders/RGBELoader.js';
+        import { Reflector } from 'three/addons/objects/Reflector.js';
+        // 后期处理相关
+        import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
+        import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
+        import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
+
+        const MODEL_CONFIGS = {
+            'Tesla Model 3': { name: 'Tesla Model 3', url: './model/tesla_model3.glb', scale: 0.65 },
+            'Xiaomi su7 max': { name: 'Xiaomi su7 max', url: './model/xiaomi_su7.glb', scale: 200 },
+            'xiaomi yu7': { name: 'Xiaomi yu7', url: './model/xiaomi_yu7.glb', scale: 200 },
+            'lamborghini': { name: 'Lamborghini', url: './model/lamborghini.glb', scale: 0.9 },
+        };
+
+        let scene, camera, renderer, controls, currentModel, composer, particles;
+        const loader = new GLTFLoader();
+
+        init();
+        animate();
+
+        function init() {
+            // 1. 场景
+            scene = new THREE.Scene();
+            scene.fog = new THREE.Fog(0x000000, 10, 50);
+
+            // 2. 相机
+            camera = new THREE.PerspectiveCamera(40, window.innerWidth / window.innerHeight, 0.1, 1000);
+            camera.position.set(8, 4, 12);
+
+            // 3. 渲染器
+            renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: "high-performance" });
+            renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            renderer.toneMapping = THREE.ReinhardToneMapping;
+            renderer.toneMappingExposure = 1.0;
+            document.body.appendChild(renderer.domElement);
+
+            // 4. 镜面地板
+            const groundMirror = new Reflector(new THREE.PlaneGeometry(100, 100), {
+                clipBias: 0.003,
+                textureWidth: window.innerWidth * window.devicePixelRatio,
+                textureHeight: window.innerHeight * window.devicePixelRatio,
+                color: 0x222222
+            });
+            groundMirror.rotateX(-Math.PI / 2);
+            scene.add(groundMirror);
+
+            // 5. 粒子系统
+            createParticles();
+
+            // 6. 后期处理
+            const renderScene = new RenderPass(scene, camera);
+            const bloomPass = new UnrealBloomPass(new THREE.Vector2(window.innerWidth, window.innerHeight), 0.4, 0.4, 0.85);
+            composer = new EffectComposer(renderer);
+            composer.addPass(renderScene);
+            composer.addPass(bloomPass);
+
+            // 7. 控制器
+            controls = new OrbitControls(camera, renderer.domElement);
+            controls.enableDamping = true;
+            controls.maxPolarAngle = Math.PI / 2 - 0.05;
+            controls.autoRotate = true; // 开启自动旋转展厅
+            controls.autoRotateSpeed = 0.5;
+
+            // 8. 灯光与环境
+            new RGBELoader()
+                .setPath('https://threejs.org/examples/textures/equirectangular/')
+                .load('venice_sunset_1k.hdr', (texture) => {
+                    texture.mapping = THREE.EquirectangularReflectionMapping;
+                    scene.environment = texture;
+                });
+
+            const topLight = new THREE.RectAreaLight(0xffffff, 5, 10, 10);
+            topLight.position.set(0, 10, 0);
+            topLight.lookAt(0, 0, 0);
+            scene.add(topLight);
+
+            // UI
+            document.getElementById('modelSelect').addEventListener('change', (e) => loadNewModel(e.target.value));
+            
+            loadNewModel('Tesla Model 3');
+        }
+
+        function createParticles() {
+            const geometry = new THREE.BufferGeometry();
+            const vertices = [];
+            for (let i = 0; i < 2000; i++) {
+                vertices.push(THREE.MathUtils.randFloatSpread(50), THREE.MathUtils.randFloat(0, 20), THREE.MathUtils.randFloatSpread(50));
+            }
+            geometry.setAttribute('position', new THREE.Float32BufferAttribute(vertices, 3));
+            const material = new THREE.PointsMaterial({ color: 0x00f2ff, size: 0.05, transparent: true, opacity: 0.5 });
+            particles = new THREE.Points(geometry, material);
+            scene.add(particles);
+        }
+
+        function loadNewModel(key) {
+            const config = MODEL_CONFIGS[key];
+            const loaderUI = document.getElementById('loader');
+            const statusBar = document.getElementById('progress-bar');
+            const statusText = document.getElementById('status');
+            
+            loaderUI.style.display = 'flex';
+            loaderUI.style.opacity = '1';
+
+            if (currentModel) {
+                scene.remove(currentModel);
+                currentModel.traverse(child => {
+                    if (child.isMesh) {
+                        child.geometry.dispose();
+                        child.material.dispose();
+                    }
+                });
+            }
+
+            loader.load(config.url, (gltf) => {
+                currentModel = gltf.scene;
+                const box = new THREE.Box3().setFromObject(currentModel);
+                const center = box.getCenter(new THREE.Vector3());
+                currentModel.position.set(-center.x, -box.min.y + 0.02, -center.z);
+                currentModel.scale.setScalar(config.scale);
+                scene.add(currentModel);
+
+                setTimeout(() => {
+                    loaderUI.style.opacity = '0';
+                    setTimeout(() => loaderUI.style.display = 'none', 800);
+                }, 500);
+            }, (xhr) => {
+                const percent = Math.round((xhr.loaded / xhr.total) * 100);
+                statusText.innerText = `Establishing Link... ${percent}%`;
+            });
+        }
+
+        function animate() {
+            requestAnimationFrame(animate);
+            
+            // 粒子微动
+            if (particles) {
+                particles.rotation.y += 0.001;
+                particles.position.y += Math.sin(Date.now() * 0.001) * 0.002;
+            }
+
+            controls.update();
+            composer.render(); // 使用 composer 代替 renderer
+        }
+
+        window.addEventListener('resize', () => {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            composer.setSize(window.innerWidth, window.innerHeight);
+        });
+    </script>
+</body>
+</html>
